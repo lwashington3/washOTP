@@ -1,1 +1,1 @@
-from .totp import generate_token
+from .totp import generate_token, TOTP
