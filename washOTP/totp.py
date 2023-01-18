@@ -1,4 +1,4 @@
-from io import BytesIO
+from qrcode import QRCode
 
 
 _CHARSET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
@@ -137,20 +137,21 @@ class TOTP:
 			link += f"&icon={icon}"
 		return _parse_http(link)
 
-	def qr(self, issuer:str, user:str, icon:str=None, save:str=None, **kwargs) -> BytesIO | None:
+	def qr(self, issuer:str, user:str, icon:str=None, save:str=None, **kwargs) -> QRCode | None:
 		"""
 		Creates a QR that can be scanned into a TOTP generator app. https://www1.auth.iij.jp/smartkey/en/uri_v1.html
+		Any kwarg given to qr.make_image can be given to this function.
 
 		:param str issuer: The name of the issuer of the TOTP, usually the application/company name.
 		:param str user: The username of the person the TOTP is issued to.
 		:param str|None icon: String pointing to the display icon.
-		:param str|None save: The file location the QR code should be saved to. If it is not given, the function will return a BytesIO object holding the QR code.
+		:param str|None save: The file location the QR code should be saved to. If save is not given, the function will return the QRCode before qr.make_image is called.
 		:param str|Color fill: The fill color of the QR code. Default is black (#000000).
 		:param str|Color back: The back color of the QR code. Default is white (#ffffff).
 		:param bool fit: If the image should be fitted or not. Default is True.
 		:param int version: The version of the qrcode. Default is 1.
 		"""
-		from qrcode import QRCode, constants
+		from qrcode import constants
 		from colors import Color, Colors, convert_color
 
 		colors = Colors()
@@ -161,21 +162,47 @@ class TOTP:
 			border=kwargs.get("border", 5)
 		)
 
-		qr.add_data(self.link(issuer, user, icon))
+		qr.add_data(self.link(issuer, user, icon,
+							  add_default_args=kwargs.get("add_default_args", False)))
 		qr.make(fit=kwargs.get("fit", True))
+
+		if save is None:
+			return qr
+
+		back = kwargs.get("back", Color(255, 255, 255, 0))
+		if back != "transparent":
+			back = convert_color(back)
 
 		img = qr.make_image(
 			fill_color=convert_color(kwargs.get("fill", colors.BLACK)),
-			back_color=convert_color(kwargs.get("back", colors.WHITE))
+			back_color=back,
+			**kwargs
 		)
 
-		if save is not None:
-			img.save(save)
-			return
+		img.save(save)
 
-		buf = BytesIO()
-		img.save(buf)
-		return buf
+	def styled_qr(self, issuer:str, user:str, save:str, icon:str=None, **kwargs) -> None:
+		"""
+		Creates a default styled QR that can be scanned into a TOTP generator app. https://www1.auth.iij.jp/smartkey/en/uri_v1.html
+
+		:param str issuer: The name of the issuer of the TOTP, usually the application/company name.
+		:param str user: The username of the person the TOTP is issued to.
+		:param str|None icon: String pointing to the display icon.
+		:param str save: The file location the QR code should be saved to.
+		:param str|Color fill: The fill color of the QR code. Default is black (#000000).
+		:param str|Color back: The back color of the QR code. Default is white (#ffffff).
+		:param bool fit: If the image should be fitted or not. Default is True.
+		:param int version: The version of the qrcode. Default is 1.
+		"""
+		from qrcode.image.styledpil import StyledPilImage
+		from qrcode.image.styles.moduledrawers import RoundedModuleDrawer
+		from qrcode.image.styles.colormasks import RadialGradiantColorMask
+
+		self.qr(issuer, user, save=save, icon=icon,
+				image_factory=StyledPilImage, module_drawer=RoundedModuleDrawer(),
+				color_mask=RadialGradiantColorMask(back_color=(255,255,255, 0), center_color=(0,0,0,255), edge_color=(0,0,255,255)),
+				**kwargs)
+
 
 	# region Properties
 	@property
