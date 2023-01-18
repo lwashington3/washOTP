@@ -25,14 +25,11 @@ def _convert_from_secret(secret:str) -> str:
 	return new_string
 
 
-def _hmac(key:str, msg:str, algo=None):
-	if algo is None:
-		from hashlib import sha1
-		algo = sha1
+def _hmac(hexkey:str, msg:str, algo="sha1"):
 	from hmac import new
 	from binascii import unhexlify
 
-	key = unhexlify(key)
+	key = unhexlify(hexkey)
 	msg = unhexlify(msg)
 
 	return new(key, msg, algo).hexdigest()
@@ -46,26 +43,26 @@ def _gen_htop_value(hash_value, length:int = 6):
 		(hmac_result[offset] & 0x7f) << 24 |
 		(hmac_result[offset+1] & 0xff) << 16 |
 		(hmac_result[offset+2] & 0xff) << 8 |
-		(hmac_result[offset+3] & 0xff) << 0
+		(hmac_result[offset+3] & 0xff)
 	)
 
 	return code % (10 ** length)
 
 
-def generate_token(key:str, time:float | int = None, length:int = 6, time_interval:int = 30, algo=None) -> str:
+def generate_token(key:str, time:float | int = None, length:int = 6, time_interval:int = 30, algo="sha1") -> str:
 	"""
 	:param str key: The key for the TOTP
 	:param int|float|None time: The time the code should be generated. This should only be set if the current unix time is not the wanted time.
 	:param int length: The number of digits in the code. Default is 6.
 	:param int time_interval: The interval between new codes. Default is 30.
 	:param algo: The hash algorithm, imported from hashlib, used to generate the code. Default is sha1.
+
+	Example:
+		>>> print(generate_token("ACAHAACAAJGILAOC"))  # Current UNIX time is 1,674,064,199.9493444
+		>>> 938585
 	"""
 	from time import time as time_func
 	from math import floor
-
-	if algo is None:
-		from hashlib import sha1
-		algo = sha1
 
 	# Pad the key if necessary
 	from hashlib import sha256, sha512
@@ -93,19 +90,23 @@ def generate_token(key:str, time:float | int = None, length:int = 6, time_interv
 
 
 class TOTP:
-	def __init__(self, key:str, length:int = 6, time_interval:int = 30, algo=None):
+	def __init__(self, key:str, length:int = 6, time_interval:int = 30, algo="sha1"):
 		"""
 		:param str key: The key for the TOTP
 		:param int length: The number of digits in the code. Default is 6.
 		:param int time_interval: The interval between new codes. Default is 30.
 		:param algo: The hash algorithm, imported from hashlib, used to generate the code. Default is sha1.
+
+		Example:
+			>>> otp = TOTP("ACAHAACAAJGILAOC")
+			>>> otp.generate()  # at current UNIX time 1,674,064,341.962709
+			>>> '437342'
+			>>> otp.generate()  # at current UNIX time 1,674,064,357.8367786
+			>>> '055711'
 		"""
 		self.key = key
 		self.length = length
 		self.time_interval = time_interval
-		if algo is None:
-			from hashlib import sha1
-			algo = sha1
 		self.algo = algo
 
 	def generate(self, time=None) -> str:
