@@ -11,7 +11,7 @@ git_url = f"https://github.com/lwashington3/{project_name}"
 
 setup(
 	name="washOTP",
-	version="1.1.1",
+	version="1.1.2",
 	author="Len Washington III",
 	author_email="l.washingtoniii.27@gmail.com",
 	description="Basic OTP generator",

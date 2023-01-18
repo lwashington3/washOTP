@@ -8,6 +8,10 @@ def _parse_http(link:str) -> str:
 	return link.replace(" ", "%20")
 
 
+def _algo_name(algo) -> str:
+	return algo if isinstance(algo, str) else algo.__name__
+
+
 def _convert_from_secret(secret:str) -> str:
 	def _lambda(value:str) -> str:
 		val = bin(_CHARSET.find(value)).replace("0b", "")
@@ -65,10 +69,9 @@ def generate_token(key:str, time:float | int = None, length:int = 6, time_interv
 
 	# Pad the key if necessary
 	from hashlib import sha256, sha512
-	if algo == sha256:
+	if _algo_name(algo) == "sha256":
 		key = key + key[:12]
-		print(key)
-	elif algo == sha512:
+	elif _algo_name(algo) == "sha512":
 		key = key + key + key + key[:4]
 
 	# Get the current unix timestamp if one isn't given
@@ -249,7 +252,7 @@ class TOTP:
 		if algo is None and not hasattr(algo, "__call__") and not isinstance(algo, str):
 			raise ValueError("The algorithm for a TOTP object must be from the hashlib library.")
 		from hashlib import algorithms_available
-		if algo not in algorithms_available and algo.__name__ not in algorithms_available:
+		if _algo_name(algo) not in algorithms_available:
 			raise ValueError("The algorithm must be from the hashlib library.")
 		self._algo = algo
 	# endregion
