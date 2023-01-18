@@ -229,9 +229,6 @@ class TOTP:
 			length = int(length)
 		self._length = length
 
-	def __len__(self):
-		return self._length
-
 	@property
 	def time_interval(self) -> int:
 		return self._time_interval
@@ -257,3 +254,9 @@ class TOTP:
 			raise ValueError("The algorithm must be from the hashlib library.")
 		self._algo = algo
 	# endregion
+
+	def __len__(self):
+		return self._length
+
+	def __repr__(self):
+		return f"TOTP(secret='{self.key}', digits={len(self)}, period={self.time_interval}, algo={_algo_name(self.algo).upper()})"
