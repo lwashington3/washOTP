@@ -1,4 +1,5 @@
 from qrcode import QRCode
+from io import BytesIO
 
 
 _CHARSET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
@@ -35,7 +36,7 @@ def _hmac(hexkey:str, msg:str, algo="sha1"):
 	return new(key, msg, algo).hexdigest()
 
 
-def _gen_htop_value(hash_value, length:int = 6):
+def _gen_htop_value(hash_value, digits:int = 6):
 	hmac_result = [int(hash_value[_hex:_hex+2], 16) for _hex in range(0, len(hash_value), 2)]
 
 	offset = hmac_result[len(hmac_result)-1] & 0xf
@@ -46,15 +47,15 @@ def _gen_htop_value(hash_value, length:int = 6):
 		(hmac_result[offset+3] & 0xff)
 	)
 
-	return code % (10 ** length)
+	return code % (10 ** digits)
 
 
-def generate_token(key:str, time:float | int = None, length:int = 6, time_interval:int = 30, algo="sha1") -> str:
+def generate_token(key:str, time:float | int = None, digits:int = 6, period:int = 30, algo="sha1") -> str:
 	"""
 	:param str key: The key for the TOTP
 	:param int|float|None time: The time the code should be generated. This should only be set if the current unix time is not the wanted time.
-	:param int length: The number of digits in the code. Default is 6.
-	:param int time_interval: The interval between new codes. Default is 30.
+	:param int digits: The number of digits in the code. Default is 6.
+	:param int period: The interval between new codes. Default is 30.
 	:param algo: The hash algorithm, imported from hashlib, used to generate the code. Default is sha1.
 
 	Example:
@@ -77,24 +78,24 @@ def generate_token(key:str, time:float | int = None, length:int = 6, time_interv
 	elif time < 0:
 		time = floor(time_func()) + time
 
-	count = int(floor(time / time_interval))
+	count = int(floor(time / period))
 	convert = _convert_from_secret(key)
 
 	# Generate a normal HOTP token
 	_hex = hex(count)[2:].zfill(16)
 	output = _hmac(str(convert), str(_hex))  # Convert is the hexkey argument in the cmd prompt, which makes it the key arg here.
 
-	code = _gen_htop_value(output, length)
-	code = str(code).zfill(length)
-	return code[-length:]
+	code = _gen_htop_value(output, digits)
+	code = str(code).zfill(digits)
+	return code[-digits:]
 
 
 class TOTP:
-	def __init__(self, key:str, length:int = 6, time_interval:int = 30, algo="sha1"):
+	def __init__(self, key:str, digits:int = 6, period:int = 30, algo="sha1"):
 		"""
 		:param str key: The key for the TOTP
-		:param int length: The number of digits in the code. Default is 6.
-		:param int time_interval: The interval between new codes. Default is 30.
+		:param int digits: The number of digits in the code. Default is 6.
+		:param int period: The interval between new codes. Default is 30.
 		:param algo: The hash algorithm, imported from hashlib, used to generate the code. Default is sha1.
 
 		Example:
@@ -105,8 +106,8 @@ class TOTP:
 			>>> '055711'
 		"""
 		self.key = key
-		self.length = length
-		self.time_interval = time_interval
+		self.digits = digits
+		self.period = period
 		self.algo = algo
 
 	def generate(self, time=None) -> str:
@@ -115,7 +116,7 @@ class TOTP:
 
 		:param int|float|None time: The time the code should be generated. This should only be set if the current unix time is not the wanted time.
 		"""
-		return generate_token(self.key, time, self.length, self.time_interval, self.algo)
+		return generate_token(self.key, time, self.digits, self.period, self.algo)
 
 	def link(self, issuer:str, user:str, icon:str=None, add_default_args=False) -> str:
 		"""
@@ -128,20 +129,20 @@ class TOTP:
 		algo = self.algo if isinstance(self.algo, str) else self.algo.__name__
 
 		if add_default_args:
-			link = f"otpauth://totp/{issuer}:{user}?secret={self.key}&issuer={issuer}&Algorithm={algo}&digits={self.length}&period={self.time_interval}"
+			link = f"otpauth://totp/{issuer}:{user}?secret={self.key}&issuer={issuer}&Algorithm={algo}&digits={self.digits}&period={self.period}"
 		else:
 			link = f"otpauth://totp/{issuer}:{user}?secret={self.key}&issuer={issuer}"
 			if algo.lower() != "sha1":
 				link += f"&Algorithm={algo}"
 			if len(self) != 6:
-				link += f"&digits={self.length}"
-			if self.time_interval != 30:
-				f"period={self.time_interval}"
+				link += f"&digits={self.digits}"
+			if self.period != 30:
+				f"period={self.period}"
 		if icon is not None:
 			link += f"&icon={icon}"
 		return _parse_http(link)
 
-	def qr(self, issuer:str, user:str, icon:str=None, save:str=None, **kwargs) -> QRCode | None:
+	def qr(self, issuer:str, user:str, icon:str=None, save:str|BytesIO=None, **kwargs) -> QRCode | None:
 		"""
 		Creates a QR that can be scanned into a TOTP generator app. https://www1.auth.iij.jp/smartkey/en/uri_v1.html
 		Any kwarg given to qr.make_image can be given to this function.
@@ -149,7 +150,7 @@ class TOTP:
 		:param str issuer: The name of the issuer of the TOTP, usually the application/company name.
 		:param str user: The username of the person the TOTP is issued to.
 		:param str|None icon: String pointing to the display icon.
-		:param str|None save: The file location the QR code should be saved to. If save is not given, the function will return the QRCode before qr.make_image is called.
+		:param str|BytesIO|None save: The file location the QR code should be saved to. If save is not given, the function will return the QRCode before qr.make_image is called.
 		:param str|Color fill: The fill color of the QR code. Default is black (#000000).
 		:param str|Color back: The back color of the QR code. Default is white (#ffffff).
 		:param bool fit: If the image should be fitted or not. Default is True.
@@ -192,7 +193,7 @@ class TOTP:
 		:param str issuer: The name of the issuer of the TOTP, usually the application/company name.
 		:param str user: The username of the person the TOTP is issued to.
 		:param str|None icon: String pointing to the display icon.
-		:param str save: The file location the QR code should be saved to.
+		:param str|BytesIO save: The file location the QR code should be saved to.
 		:param str|Color fill: The fill color of the QR code. Default is black (#000000).
 		:param str|Color back: The back color of the QR code. Default is white (#ffffff).
 		:param bool fit: If the image should be fitted or not. Default is True.
@@ -207,7 +208,6 @@ class TOTP:
 				color_mask=RadialGradiantColorMask(back_color=(255,255,255, 0), center_color=(0,0,0,255), edge_color=(0,0,255,255)),
 				**kwargs)
 
-
 	# region Properties
 	@property
 	def key(self) -> str:
@@ -220,26 +220,26 @@ class TOTP:
 		self._key = key
 
 	@property
-	def length(self) -> int:
-		return self._length
+	def digits(self) -> int:
+		return self._digits
 
-	@length.setter
-	def length(self, length:int):
-		if not isinstance(length, int):
-			length = int(length)
-		self._length = length
+	@digits.setter
+	def digits(self, digits:int):
+		if not isinstance(digits, int):
+			digits = int(digits)
+		self._digits = digits
 
 	@property
-	def time_interval(self) -> int:
-		return self._time_interval
+	def period(self) -> int:
+		return self._period
 
-	@time_interval.setter
-	def time_interval(self, time_interval:int):
-		if not isinstance(time_interval, int):
-			time_interval = int(time_interval)
-		if time_interval <= 0:
-			raise ValueError("The time_interval (period) must be a positive amount of time.")
-		self._time_interval = time_interval
+	@period.setter
+	def period(self, period:int):
+		if not isinstance(period, int):
+			period = int(period)
+		if period <= 0:
+			raise ValueError("The period (period) must be a positive amount of time.")
+		self._period = period
 
 	@property
 	def algo(self):
@@ -256,7 +256,7 @@ class TOTP:
 	# endregion
 
 	def __len__(self):
-		return self._length
+		return self._digits
 
 	def __repr__(self):
-		return f"TOTP(secret='{self.key}', digits={len(self)}, period={self.time_interval}, algo={_algo_name(self.algo).upper()})"
+		return f"TOTP(secret='{self.key}', digits={len(self)}, period={self.period}, algo={_algo_name(self.algo).upper()})"
