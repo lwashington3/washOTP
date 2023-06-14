@@ -2,6 +2,9 @@ from qrcode import QRCode
 from io import BytesIO
 
 
+__ALL__ = ["_CHARSET", "generate_token", "TOTP"]
+
+
 _CHARSET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
 
 
@@ -26,12 +29,12 @@ def _convert_from_secret(secret:str) -> str:
 	return new_string
 
 
-def _hmac(hexkey:str, msg:str, algo="sha1"):
+def _hmac(hexkey:str, hexmsg:str, algo="sha1"):
 	from hmac import new
 	from binascii import unhexlify
 
 	key = unhexlify(hexkey)
-	msg = unhexlify(msg)
+	msg = unhexlify(hexmsg)
 
 	return new(key, msg, algo).hexdigest()
 
@@ -83,7 +86,7 @@ def generate_token(key:str, time:float | int = None, digits:int = 6, period:int 
 
 	# Generate a normal HOTP token
 	_hex = hex(count)[2:].zfill(16)
-	output = _hmac(str(convert), str(_hex))  # Convert is the hexkey argument in the cmd prompt, which makes it the key arg here.
+	output = _hmac(str(convert), str(_hex), algo=algo)  # Convert is the hexkey argument in the cmd prompt, which makes it the key arg here.
 
 	code = _gen_htop_value(output, digits)
 	code = str(code).zfill(digits)
@@ -118,13 +121,14 @@ class TOTP:
 		"""
 		return generate_token(self.key, time, self.digits, self.period, self.algo)
 
-	def link(self, issuer:str, user:str, icon:str=None, add_default_args=False) -> str:
+	def link(self, issuer:str, user:str, icon:str = None, add_default_args:bool = False) -> str:
 		"""
 		Creates the link that is scanned into a TOTP generator app. https://www1.auth.iij.jp/smartkey/en/uri_v1.html
 
 		:param str issuer: The name of the issuer of the TOTP, usually the application/company name.
 		:param str user: The username of the person the TOTP is issued to.
 		:param str|None icon: String pointing to the display icon.
+		:param bool add_default_args: If the QR's link should include the default values required for TOTP generators.
 		"""
 		algo = self.algo if isinstance(self.algo, str) else self.algo.__name__
 
@@ -142,7 +146,7 @@ class TOTP:
 			link += f"&icon={icon}"
 		return _parse_http(link)
 
-	def qr(self, issuer:str, user:str, icon:str=None, save:str|BytesIO=None, **kwargs) -> QRCode | None:
+	def qr(self, issuer:str, user:str, icon:str = None, save:str | BytesIO = None, **kwargs) -> QRCode | None:
 		"""
 		Creates a QR that can be scanned into a TOTP generator app. https://www1.auth.iij.jp/smartkey/en/uri_v1.html
 		Any kwarg given to qr.make_image can be given to this function.
@@ -260,3 +264,20 @@ class TOTP:
 
 	def __repr__(self):
 		return f"TOTP(secret='{self.key}', digits={len(self)}, period={self.period}, algo={_algo_name(self.algo).upper()})"
+
+	@classmethod
+	def new_key(cls, key_length:int = 16, **kwargs):
+		"""
+		Creates a new TOTP generator with a randomly generated key.
+		:param int key_length: The length of the secret key.
+		:return: The TOTP generator object and the new secret key.
+		:rtype: tuple[TOTP, str]
+		"""
+		from random import choice
+		key = "".join((choice(_CHARSET) for _ in range(key_length)))
+		return cls(key=key, **kwargs), key
+
+
+if __name__ == '__main__':
+	otp = TOTP("ACAHAACAAJGILAOC")
+	otp.generate(1686012424)
